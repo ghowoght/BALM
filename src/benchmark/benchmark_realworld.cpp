@@ -15,6 +15,9 @@
 
 using namespace std;
 
+#include <string>
+std::string save_path;
+
 template <typename T>
 void pub_pl_func(T &pl, ros::Publisher &pub)
 {
@@ -30,7 +33,7 @@ ros::Publisher pub_path, pub_test, pub_show, pub_cute;
 
 int read_pose(vector<double> &tims, PLM(3) &rots, PLV(3) &poss, string prename)
 {
-  string readname = prename + "alidarPose.csv";
+  string readname = prename + "pose_balm.csv";
 
   cout << readname << endl;
   ifstream inFile(readname);
@@ -72,9 +75,25 @@ int read_pose(vector<double> &tims, PLM(3) &rots, PLV(3) &poss, string prename)
   return pose_size;
 }
 
+#include <filesystem>
 void read_file(vector<IMUST> &x_buf, vector<pcl::PointCloud<PointType>::Ptr> &pl_fulls, string &prename)
 {
-  prename = prename + "/datas/benchmark_realworld/";
+  // 读取文件夹下所有文件夹名,并存入vector    
+  std::vector<std::string> sub_paths;
+  for (const auto & entry : std::filesystem::directory_iterator(prename)){
+      sub_paths.push_back(entry.path());
+  }
+  std::sort(sub_paths.begin(), sub_paths.end());
+  // for(auto & sub_path : sub_paths){
+  //     std::cout << sub_path << std::endl;
+  // }
+
+  auto sub_path = sub_paths.back();
+
+  auto path = sub_path + "/hba_output/";
+  save_path = path;
+
+  prename = path;
 
   PLV(3) poss; PLM(3) rots;
   vector<double> tims;
@@ -82,7 +101,7 @@ void read_file(vector<IMUST> &x_buf, vector<pcl::PointCloud<PointType>::Ptr> &pl
   
   for(int m=0; m<pose_size; m++)
   {
-    string filename = prename + "full" + to_string(m) + ".pcd";
+    string filename = prename + "pcd/" + to_string(m) + ".pcd";
 
     pcl::PointCloud<PointType>::Ptr pl_ptr(new pcl::PointCloud<PointType>());
     pcl::PointCloud<pcl::PointXYZI> pl_tem;
@@ -102,6 +121,23 @@ void read_file(vector<IMUST> &x_buf, vector<pcl::PointCloud<PointType>::Ptr> &pl
     x_buf.push_back(curr);
   }
   
+
+}
+
+void save_pose(vector<IMUST>& x_buf){
+  ofstream pose_ofs(save_path + "pose_with_time_balm.txt");
+  pose_ofs << fixed << setprecision(15);
+  for(int i = 0; i < x_buf.size(); ++i){
+    double unixsecond = x_buf[i].t;
+    int GPS_LEAP_SECOND = 18;
+    double seconds = unixsecond + GPS_LEAP_SECOND - 315964800;
+    double gpsweek    = floor(seconds / 604800);
+    double gpsweeksec = seconds - gpsweek * 604800;
+    pose_ofs << gpsweeksec << " ";
+    pose_ofs << x_buf[i].p.transpose() << " ";
+    Eigen::Quaterniond q(x_buf[i].R);
+    pose_ofs << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << std::endl;     
+  } 
 
 }
 
@@ -213,8 +249,8 @@ int main(int argc, char **argv)
       printf("The optimization is terminated.\n");
       exit(0);
     }
-
-    BALM2 opt_lsv;
+ 
+    BALM2 opt_lsv; 
     opt_lsv.damping_iter(x_buf, voxhess);
 
     for(auto iter=surf_map.begin(); iter!=surf_map.end();)
@@ -230,6 +266,7 @@ int main(int argc, char **argv)
   printf("\nRefined point cloud is publishing...\n");
   malloc_trim(0);
   data_show(x_buf, pl_fulls);
+  save_pose(x_buf);
   printf("\nRefined point cloud is published.\n");
 
   ros::spin();

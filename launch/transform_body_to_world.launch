@@ -1,0 +1,5 @@
+<launch>
+  <node pkg="balm2" type="transform_body_to_world" name="transform_body_to_world" output="screen">
+    <param name="path" type="string" value="/media/ghowoght/T7/result"/>
+  </node>
+</launch>   
